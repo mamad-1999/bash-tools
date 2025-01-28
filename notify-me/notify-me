@@ -1,0 +1,104 @@
+#!/bin/bash
+
+SOUND_URL="https://raw.githubusercontent.com/mamad-1999/notify-me/refs/heads/master/alarm.wav"
+SOUND_DIR="$HOME/.notify-me"
+SOUND_FILE="$SOUND_DIR/alarm.wav"
+
+display_help() {
+    echo "Usage: notify-me [HH:MM] \"message\""
+    echo "Alarm program that notifies the user with a message at the specified time."
+    echo -e "\nOptions:"
+    echo "  -h               Display help"
+    echo -e "\nExamples:"
+    echo "  notify-me 14:30 \"Go to the gym\""
+    echo "  notify-me 09:00 \"Join the meeting\""
+    echo "  notify-me 1:15 \"Take a break\""
+    echo -e "\nThe program will also play a sound when the alarm triggers."
+}
+
+validate_time() {
+    local time=$1
+    if [[ ! $time =~ ^[0-9]{1,2}:[0-9]{2}$ ]]; then
+        echo "Invalid time format. Use HH:MM or H:MM"
+        exit 1
+    fi
+
+    local hour=${time%%:*}
+    local minute=${time##*:}
+
+    if (( hour < 0 || hour > 23 )); then
+        echo "Invalid hour value"
+        exit 1
+    fi
+
+    if (( minute < 0 || minute > 59 )); then
+        echo "Invalid minute value"
+        exit 1
+    fi
+}
+
+calculate_sleep() {
+    local target=$1
+    local current_epoch=$(date +%s)
+    local target_epoch=$(date -d "$target" +%s)
+    
+    if (( target_epoch < current_epoch )); then
+        target_epoch=$(date -d "$target +1 day" +%s)
+    fi
+    
+    echo $(( target_epoch - current_epoch ))
+}
+
+download_sound() {
+    mkdir -p "$SOUND_DIR"
+    echo "Downloading sound file..."
+    if ! wget -q "$SOUND_URL" -O "$SOUND_FILE"; then
+        echo "Failed to download sound file"
+        exit 1
+    fi
+    echo "Sound file downloaded to $SOUND_FILE"
+}
+
+# Handle help flag
+if [[ "$1" == "-h" ]]; then
+    display_help
+    exit 0
+fi
+
+# Validate arguments
+if [[ $# -lt 2 ]]; then
+    echo "Error: Invalid number of arguments."
+    display_help
+    exit 1
+fi
+
+time=$1
+message="${*:2}"
+
+validate_time "$time"
+
+# Get current date components
+current_date=$(date +"%Y-%m-%d")
+target_datetime="$current_date $time"
+
+# Calculate sleep time
+sleep_seconds=$(calculate_sleep "$target_datetime")
+
+# Ensure sound file exists
+if [[ ! -f "$SOUND_FILE" ]]; then
+    download_sound
+fi
+
+echo "Sleeping for $sleep_seconds seconds until $(date -d "+$sleep_seconds seconds")"
+
+sleep $sleep_seconds
+
+# Show notification
+notify-send "Alarm" "$message"
+
+# Play sound
+if ! aplay "$SOUND_FILE" &>/dev/null; then
+    echo "Error playing sound - make sure 'aplay' is installed"
+fi
+
+echo "Alarm completed!"
